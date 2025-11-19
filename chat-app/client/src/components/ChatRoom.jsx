@@ -264,7 +264,7 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
     };
 
     return (
-        <div className="flex flex-col h-screen bg-[#0b141a] relative overflow-hidden">
+        <div className="flex flex-col h-[100dvh] bg-[#0b141a] relative overflow-hidden">
 
             {/* Header */}
             <div className="bg-[#202c33] px-4 py-2.5 flex items-center justify-between z-20 border-b border-[#222d34] shadow-sm">
