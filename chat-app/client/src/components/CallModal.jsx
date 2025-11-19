@@ -20,14 +20,20 @@ const CallModal = ({
 
     // Set remote stream when it changes
     useEffect(() => {
+        console.log('Remote stream changed:', remoteStream);
         if (remoteVideoRef.current && remoteStream) {
+            console.log('Setting remote video srcObject');
             remoteVideoRef.current.srcObject = remoteStream;
+            console.log('Remote video element:', remoteVideoRef.current);
+            console.log('Remote stream tracks:', remoteStream.getTracks());
         }
     }, [remoteStream]);
 
     // Set local stream when it changes
     useEffect(() => {
+        console.log('Local stream changed:', localStream);
         if (localVideoRef.current && localStream) {
+            console.log('Setting local video srcObject');
             localVideoRef.current.srcObject = localStream;
         }
     }, [localStream]);
