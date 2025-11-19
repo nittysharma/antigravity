@@ -158,19 +158,35 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
             localStreamRef.current = stream;
             setCallState('calling');
 
-            const peer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            const peer = new RTCPeerConnection({
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' }
+                ]
+            });
             connectionRef.current = peer;
 
             stream.getTracks().forEach(track => peer.addTrack(track, stream));
 
             peer.onicecandidate = (event) => {
                 if (event.candidate) {
+                    console.log('Sending ICE candidate to:', targetUser.id);
                     socket.emit('ice_candidate', { to: targetUser.id, candidate: event.candidate });
                 }
             };
 
             peer.ontrack = (event) => {
+                console.log('Received remote track:', event.streams[0]);
                 setRemoteStream(event.streams[0]);
+            };
+
+            peer.onconnectionstatechange = () => {
+                console.log('Connection state:', peer.connectionState);
+            };
+
+            peer.oniceconnectionstatechange = () => {
+                console.log('ICE connection state:', peer.iceConnectionState);
             };
 
             const offer = await peer.createOffer();
@@ -195,19 +211,35 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
             setLocalStream(stream);
             localStreamRef.current = stream;
 
-            const peer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            const peer = new RTCPeerConnection({
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' }
+                ]
+            });
             connectionRef.current = peer;
 
             stream.getTracks().forEach(track => peer.addTrack(track, stream));
 
             peer.onicecandidate = (event) => {
                 if (event.candidate) {
+                    console.log('Sending ICE candidate to:', callerSignal.from);
                     socket.emit('ice_candidate', { to: callerSignal.from, candidate: event.candidate });
                 }
             };
 
             peer.ontrack = (event) => {
+                console.log('Received remote track:', event.streams[0]);
                 setRemoteStream(event.streams[0]);
+            };
+
+            peer.onconnectionstatechange = () => {
+                console.log('Connection state:', peer.connectionState);
+            };
+
+            peer.oniceconnectionstatechange = () => {
+                console.log('ICE connection state:', peer.iceConnectionState);
             };
 
             await peer.setRemoteDescription(callerSignal.signal);
