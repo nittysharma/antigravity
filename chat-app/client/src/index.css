@@ -24,8 +24,21 @@
   --shadow-sm: 0 1px 0.5px rgba(0, 0, 0, 0.13);
 }
 
-body {
+html, body {
   margin: 0;
+  padding: 0;
+  overflow: hidden;
+  height: 100%;
+  width: 100%;
+  position: fixed;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background-color: var(--wa-bg-deep);
   color: var(--wa-text-primary);
