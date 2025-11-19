@@ -107,7 +107,16 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
     }, [socket]);
 
     const sendMessage = (content, type = 'text') => {
-        const messageId = crypto.randomUUID();
+        // Helper to generate UUID with fallback for non-secure contexts
+        const generateUUID = () => {
+            if (window.crypto && window.crypto.randomUUID) {
+                return window.crypto.randomUUID();
+            }
+            // Fallback for non-secure contexts (HTTP)
+            return Date.now().toString(36) + Math.random().toString(36).substr(2);
+        };
+
+        const messageId = generateUUID();
         const messageData = {
             id: messageId,
             roomId,
