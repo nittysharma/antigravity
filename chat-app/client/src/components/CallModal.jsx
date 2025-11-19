@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Phone, Video, Mic, MicOff, VideoOff, PhoneOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -15,6 +15,22 @@ const CallModal = ({
     toggleMute,
     toggleVideo
 }) => {
+    const remoteVideoRef = useRef(null);
+    const localVideoRef = useRef(null);
+
+    // Set remote stream when it changes
+    useEffect(() => {
+        if (remoteVideoRef.current && remoteStream) {
+            remoteVideoRef.current.srcObject = remoteStream;
+        }
+    }, [remoteStream]);
+
+    // Set local stream when it changes
+    useEffect(() => {
+        if (localVideoRef.current && localStream) {
+            localVideoRef.current.srcObject = localStream;
+        }
+    }, [localStream]);
     if (callState === 'idle') return null;
 
     return (
@@ -65,9 +81,7 @@ const CallModal = ({
                         <div className="flex-1 relative bg-black overflow-hidden">
                             {remoteStream ? (
                                 <video
-                                    ref={video => {
-                                        if (video) video.srcObject = remoteStream;
-                                    }}
+                                    ref={remoteVideoRef}
                                     autoPlay
                                     playsInline
                                     className="w-full h-full object-cover"
@@ -90,9 +104,7 @@ const CallModal = ({
                             <div className="absolute bottom-24 right-4 w-32 h-48 bg-[#202c33] rounded-lg overflow-hidden shadow-xl border border-[#37404a]">
                                 {localStream && (
                                     <video
-                                        ref={video => {
-                                            if (video) video.srcObject = localStream;
-                                        }}
+                                        ref={localVideoRef}
                                         autoPlay
                                         playsInline
                                         muted
