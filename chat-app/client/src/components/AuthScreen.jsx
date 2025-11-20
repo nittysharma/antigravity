@@ -19,7 +19,7 @@ const AuthScreen = ({ onCreateRoom, onJoinRoom }) => {
     };
 
     return (
-        <div className="min-h-screen flex flex-col items-center bg-[#111b21] relative overflow-hidden">
+        <div className="h-[100dvh] flex flex-col items-center bg-[#111b21] relative overflow-hidden">
             {/* Green Header Strip */}
             <div className="w-full h-32 bg-[#00a884] absolute top-0 left-0 z-0">
                 <div className="max-w-5xl mx-auto p-5 flex items-center gap-3">

@@ -296,10 +296,10 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
     };
 
     return (
-        <div className="flex flex-col h-[100dvh] bg-[#0b141a] relative overflow-hidden">
+        <div className="flex flex-col h-[100dvh] w-full bg-[#0b141a] relative">
 
-            {/* Header */}
-            <div className="bg-[#202c33] px-4 py-2.5 flex items-center justify-between z-20 border-b border-[#222d34] shadow-sm">
+            {/* Header - Fixed height */}
+            <div className="flex-none bg-[#202c33] px-4 py-2.5 flex items-center justify-between z-20 border-b border-[#222d34] shadow-sm">
                 <div className="flex items-center gap-4 cursor-pointer" onClick={onLock}>
                     {/* Avatar Placeholder */}
                     <div className="w-10 h-10 rounded-full bg-[#202c33] overflow-hidden">
@@ -352,23 +352,26 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
                 toggleVideo={toggleVideo}
             />
 
-            {/* Chat Area Background */}
-            <div className="absolute inset-0 z-0 bg-[#0b141a]">
-                <div className="wa-doodle-bg"></div>
+            {/* Messages - Flexible area with background */}
+            <div className="flex-1 relative overflow-hidden">
+                {/* Chat Area Background */}
+                <div className="absolute inset-0 z-0 bg-[#0b141a]">
+                    <div className="wa-doodle-bg"></div>
+                </div>
+
+                {/* Messages */}
+                <div className="relative z-10 h-full">
+                    <MessageList
+                        messages={messages}
+                        currentUser={socket.id}
+                        onReaction={handleReaction}
+                        onReply={handleReply}
+                    />
+                </div>
             </div>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-hidden relative z-10 flex flex-col">
-                <MessageList
-                    messages={messages}
-                    currentUser={socket.id}
-                    onReaction={handleReaction}
-                    onReply={handleReply}
-                />
-            </div>
-
-            {/* Input Area */}
-            <div className="z-20">
+            {/* Input Area - Fixed height */}
+            <div className="flex-none z-20">
                 <MessageInput
                     onSendMessage={sendMessage}
                     onTyping={handleTyping}

@@ -75,7 +75,7 @@ function App() {
   }
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-slate-900 text-white">
+    <div className="h-[100dvh] w-screen overflow-hidden bg-slate-900 text-white">
       {isLocked && (
         <LockScreen onUnlock={handleUnlock} onExit={handleExit} />
       )}
