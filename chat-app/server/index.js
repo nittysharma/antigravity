@@ -3,6 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const db = require('./database');
 
 const app = express();
 app.use(cors());
@@ -26,11 +27,18 @@ io.on('connection', (socket) => {
   console.log(`User Connected: ${socket.id}`);
 
   socket.on('create_room', ({ roomId, pin, username }) => {
-    if (rooms[roomId]) {
+    // Check if room exists in database
+    const existingRoom = db.getRoom(roomId);
+    if (existingRoom) {
       socket.emit('error', 'Room already exists');
       return;
     }
-    rooms[roomId] = { pin, users: [], messages: [] };
+
+    // Save room to database
+    db.createRoom(roomId, pin);
+
+    // Keep in-memory state for active users
+    rooms[roomId] = { pin, users: [] };
     socket.join(roomId);
     rooms[roomId].users.push({ id: socket.id, username });
     socket.emit('room_joined', { roomId, username });
@@ -39,7 +47,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('join_room', ({ roomId, pin, username }) => {
-    const room = rooms[roomId];
+    // Check database for room
+    const room = db.getRoom(roomId);
     if (!room) {
       socket.emit('error', 'Room does not exist');
       return;
@@ -48,20 +57,31 @@ io.on('connection', (socket) => {
       socket.emit('error', 'Incorrect PIN');
       return;
     }
+
+    // Initialize in-memory room if not exists
+    if (!rooms[roomId]) {
+      rooms[roomId] = { pin: room.pin, users: [] };
+    }
+
     socket.join(roomId);
-    room.users.push({ id: socket.id, username });
+    rooms[roomId].users.push({ id: socket.id, username });
     socket.emit('room_joined', { roomId, username });
-    socket.emit('load_messages', room.messages);
-    io.to(roomId).emit('user_list', room.users);
+
+    // Load messages from database
+    const messages = db.getMessages(roomId);
+    socket.emit('load_messages', messages);
+
+    io.to(roomId).emit('user_list', rooms[roomId].users);
     console.log(`${username} joined room ${roomId}`);
   });
 
   socket.on('send_message', (data) => {
     // data: { roomId, author, message, time, type (text/image), file? }
     console.log(`Message sent in room ${data.roomId} by ${data.username} (Type: ${data.type})`);
-    if (rooms[data.roomId]) {
-      rooms[data.roomId].messages.push(data);
-    }
+
+    // Save message to database
+    db.saveMessage(data);
+
     socket.to(data.roomId).emit('receive_message', data);
   });
 
@@ -70,17 +90,11 @@ io.on('connection', (socket) => {
   });
 
   socket.on('add_reaction', ({ roomId, messageId, reaction, username }) => {
+    // Save reaction to database
+    db.saveReaction(messageId, username, reaction);
+
     // Broadcast reaction to everyone in the room
     io.to(roomId).emit('message_reaction', { messageId, reaction, username });
-
-    // Update stored message
-    if (rooms[roomId]) {
-      const msg = rooms[roomId].messages.find(m => m.id === messageId);
-      if (msg) {
-        if (!msg.reactions) msg.reactions = {};
-        msg.reactions[username] = reaction;
-      }
-    }
   });
 
   // WebRTC Signaling
@@ -100,6 +114,12 @@ io.on('connection', (socket) => {
     io.to(to).emit('end_call');
   });
 
+  socket.on('get_users', ({ roomId }) => {
+    if (rooms[roomId]) {
+      socket.emit('user_list', rooms[roomId].users);
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log('User Disconnected', socket.id);
     // Remove user from all rooms they were in
@@ -110,7 +130,8 @@ io.on('connection', (socket) => {
         const user = room.users[index];
         room.users.splice(index, 1);
         io.to(roomId).emit('user_list', room.users);
-        // Optional: Clean up empty rooms
+        // Keep room in database even if empty - rooms persist forever
+        // Only clean up in-memory state if no active users
         if (room.users.length === 0) {
           delete rooms[roomId];
         }

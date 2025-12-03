@@ -35,23 +35,39 @@ function App() {
     };
   }, [roomData, isLocked, lastActivity]);
 
+  const [pendingRoomData, setPendingRoomData] = useState(null);
+
+  useEffect(() => {
+    const onRoomJoined = ({ roomId, username }) => {
+      if (pendingRoomData && pendingRoomData.roomId === roomId) {
+        setRoomData(pendingRoomData);
+        setPendingRoomData(null);
+        setLastActivity(Date.now());
+      }
+    };
+
+    const onError = (msg) => {
+      alert(msg);
+      setPendingRoomData(null);
+    };
+
+    socket.on('room_joined', onRoomJoined);
+    socket.on('error', onError);
+
+    return () => {
+      socket.off('room_joined', onRoomJoined);
+      socket.off('error', onError);
+    };
+  }, [pendingRoomData]);
+
   const handleCreateRoom = ({ username, roomId, pin }) => {
+    setPendingRoomData({ username, roomId, pin });
     socket.emit('create_room', { roomId, pin, username });
-    // Listen for success/error
-    socket.once('room_joined', () => {
-      setRoomData({ roomId, pin, username });
-      setLastActivity(Date.now());
-    });
-    socket.once('error', (msg) => alert(msg));
   };
 
   const handleJoinRoom = ({ username, roomId, pin }) => {
+    setPendingRoomData({ username, roomId, pin });
     socket.emit('join_room', { roomId, pin, username });
-    socket.once('room_joined', () => {
-      setRoomData({ roomId, pin, username });
-      setLastActivity(Date.now());
-    });
-    socket.once('error', (msg) => alert(msg));
   };
 
   const handleUnlock = (enteredPin) => {

@@ -17,13 +17,15 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
     const [localStream, setLocalStream] = useState(null);
     const [remoteStream, setRemoteStream] = useState(null);
     const [isMuted, setIsMuted] = useState(false);
-    const [isVideoOff, setIsVideoOff] = useState(false);
 
     const connectionRef = useRef();
     const localStreamRef = useRef();
     const candidatesQueue = useRef([]);
 
     useEffect(() => {
+        // Request user list immediately on mount
+        socket.emit('get_users', { roomId });
+
         socket.on('receive_message', (data) => {
             setMessages((prev) => [...prev, { ...data, reactions: {} }]);
         });
@@ -148,12 +150,12 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
     };
 
     // WebRTC Functions
-    const startCall = async (isVideo) => {
+    const startCall = async () => {
         const targetUser = users.find(u => u.username !== username);
         if (!targetUser) return alert("No one else in the room!");
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: isVideo, audio: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
             setLocalStream(stream);
             localStreamRef.current = stream;
             setCallState('calling');
@@ -207,7 +209,7 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
     const answerCall = async () => {
         try {
             setCallState('connected');
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
             setLocalStream(stream);
             localStreamRef.current = stream;
 
@@ -283,15 +285,11 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
 
     const toggleMute = () => {
         if (localStreamRef.current) {
-            localStreamRef.current.getAudioTracks()[0].enabled = !localStreamRef.current.getAudioTracks()[0].enabled;
-            setIsMuted(!localStreamRef.current.getAudioTracks()[0].enabled);
-        }
-    };
-
-    const toggleVideo = () => {
-        if (localStreamRef.current) {
-            localStreamRef.current.getVideoTracks()[0].enabled = !localStreamRef.current.getVideoTracks()[0].enabled;
-            setIsVideoOff(!localStreamRef.current.getVideoTracks()[0].enabled);
+            const audioTrack = localStreamRef.current.getAudioTracks()[0];
+            if (audioTrack) {
+                audioTrack.enabled = !audioTrack.enabled;
+                setIsMuted(!audioTrack.enabled);
+            }
         }
     };
 
@@ -321,12 +319,8 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
                 </div>
 
                 <div className="flex items-center gap-6 text-[#aebac1]">
-                    <Video
-                        onClick={() => startCall(true)}
-                        className="w-5 h-5 cursor-pointer hover:text-white transition-colors"
-                    />
                     <Phone
-                        onClick={() => startCall(false)}
+                        onClick={() => startCall()}
                         className="w-5 h-5 cursor-pointer hover:text-white transition-colors"
                     />
                     <div className="w-[1px] h-6 bg-[#37404a] mx-1"></div>
@@ -347,9 +341,7 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
                 onReject={endCall}
                 onEnd={endCall}
                 isMuted={isMuted}
-                isVideoOff={isVideoOff}
                 toggleMute={toggleMute}
-                toggleVideo={toggleVideo}
             />
 
             {/* Messages - Flexible area with background */}
