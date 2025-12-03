@@ -65,18 +65,16 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
 
         socket.on('call_accepted', (signal) => {
             setCallState('connected');
-            // Fix: Use setRemoteDescription for native WebRTC, not .signal()
-            connectionRef.current.setRemoteDescription(new RTCSessionDescription(signal)).catch(e => console.error("Error setting remote description:", e));
-            // I made a mistake in the previous step assuming `signal` method exists on native PC.
-            // I need to fix this to use `setRemoteDescription`.
-
-            connectionRef.current.setRemoteDescription(signal).then(() => {
-                // Process queued candidates if any (though usually caller has PC ready, candidates might arrive before answer)
-                while (candidatesQueue.current.length > 0) {
-                    const candidate = candidatesQueue.current.shift();
-                    connectionRef.current.addIceCandidate(candidate).catch(e => console.error("Error adding queued candidate:", e));
-                }
-            }).catch(e => console.error("Error setting remote description:", e));
+            const sessionDesc = new RTCSessionDescription(signal);
+            connectionRef.current.setRemoteDescription(sessionDesc)
+                .then(() => {
+                    // Process queued candidates
+                    while (candidatesQueue.current.length > 0) {
+                        const candidate = candidatesQueue.current.shift();
+                        connectionRef.current.addIceCandidate(candidate).catch(e => console.error("Error adding queued candidate:", e));
+                    }
+                })
+                .catch(e => console.error("Error setting remote description:", e));
         });
 
         socket.on('ice_candidate', (candidate) => {
