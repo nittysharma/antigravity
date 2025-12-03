@@ -65,11 +65,8 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
 
         socket.on('call_accepted', (signal) => {
             setCallState('connected');
-            connectionRef.current.signal(signal);
-            // Note: simple-peer handles signaling internally, but for native we need to set remote desc
-            // Wait, I am using native WebRTC but the code says `connectionRef.current.signal(signal)`.
-            // `signal` is a method of simple-peer, NOT native RTCPeerConnection.
-            // Native uses `setRemoteDescription`.
+            // Fix: Use setRemoteDescription for native WebRTC, not .signal()
+            connectionRef.current.setRemoteDescription(new RTCSessionDescription(signal)).catch(e => console.error("Error setting remote description:", e));
             // I made a mistake in the previous step assuming `signal` method exists on native PC.
             // I need to fix this to use `setRemoteDescription`.
 
