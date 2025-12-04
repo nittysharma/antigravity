@@ -279,12 +279,27 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
     };
 
     const toggleMute = () => {
+        const newMutedState = !isMuted;
+        setIsMuted(newMutedState);
+
+        console.log(`Toggling mute to: ${newMutedState}`);
+
+        // 1. Mute local stream tracks (Source)
         if (localStreamRef.current) {
-            const audioTrack = localStreamRef.current.getAudioTracks()[0];
-            if (audioTrack) {
-                audioTrack.enabled = !audioTrack.enabled;
-                setIsMuted(!audioTrack.enabled);
-            }
+            localStreamRef.current.getAudioTracks().forEach(track => {
+                track.enabled = !newMutedState;
+                console.log(`Local track ${track.id} enabled: ${track.enabled}`);
+            });
+        }
+
+        // 2. Mute PeerConnection senders (Network)
+        if (connectionRef.current) {
+            connectionRef.current.getSenders().forEach(sender => {
+                if (sender.track && sender.track.kind === 'audio') {
+                    sender.track.enabled = !newMutedState;
+                    console.log(`Sender track ${sender.track.id} enabled: ${sender.track.enabled}`);
+                }
+            });
         }
     };
 

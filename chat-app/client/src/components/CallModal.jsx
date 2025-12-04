@@ -29,12 +29,20 @@ const CallModal = ({
 
             if (isSupported) {
                 try {
-                    // Request permission to list devices (requires getUserMedia to be called first usually, 
-                    // but we are in a call context so permissions should be granted)
                     const devices = await navigator.mediaDevices.enumerateDevices();
                     const outputs = devices.filter(d => d.kind === 'audiooutput');
                     setAudioDevices(outputs);
-                    if (outputs.length > 0) {
+
+                    // Auto-select earpiece/receiver if available
+                    const earpiece = outputs.find(d =>
+                        d.label.toLowerCase().includes('earpiece') ||
+                        d.label.toLowerCase().includes('receiver') ||
+                        d.label.toLowerCase().includes('handset')
+                    );
+
+                    if (earpiece) {
+                        setSelectedDeviceId(earpiece.deviceId);
+                    } else if (outputs.length > 0) {
                         setSelectedDeviceId(outputs[0].deviceId);
                     }
                 } catch (err) {
@@ -225,8 +233,8 @@ const CallModal = ({
                                     <button
                                         onClick={() => setShowDeviceList(!showDeviceList)}
                                         className={`p-5 rounded-full transition-all ${showDeviceList
-                                                ? 'bg-[#00a884] text-white shadow-lg'
-                                                : 'bg-[#37404a] text-[#e9edef] hover:bg-[#404d57]'
+                                            ? 'bg-[#00a884] text-white shadow-lg'
+                                            : 'bg-[#37404a] text-[#e9edef] hover:bg-[#404d57]'
                                             }`}
                                     >
                                         <Volume2 className="w-7 h-7" />
