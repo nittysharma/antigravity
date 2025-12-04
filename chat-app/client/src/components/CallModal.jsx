@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { Phone, Mic, MicOff, PhoneOff } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Phone, Mic, MicOff, PhoneOff, Volume2, Bluetooth } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const CallModal = ({
@@ -14,7 +14,39 @@ const CallModal = ({
     toggleMute
 }) => {
     const remoteAudioRef = useRef(null);
-    const [callDuration, setCallDuration] = React.useState(0);
+    const [callDuration, setCallDuration] = useState(0);
+    const [audioDevices, setAudioDevices] = useState([]);
+    const [selectedDeviceId, setSelectedDeviceId] = useState('');
+    const [showDeviceList, setShowDeviceList] = useState(false);
+    const [supportsSetSinkId, setSupportsSetSinkId] = useState(false);
+
+    // Check support and list devices
+    useEffect(() => {
+        const checkSupport = async () => {
+            const element = document.createElement('audio');
+            const isSupported = typeof element.setSinkId !== 'undefined';
+            setSupportsSetSinkId(isSupported);
+
+            if (isSupported) {
+                try {
+                    // Request permission to list devices (requires getUserMedia to be called first usually, 
+                    // but we are in a call context so permissions should be granted)
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const outputs = devices.filter(d => d.kind === 'audiooutput');
+                    setAudioDevices(outputs);
+                    if (outputs.length > 0) {
+                        setSelectedDeviceId(outputs[0].deviceId);
+                    }
+                } catch (err) {
+                    console.error("Error listing audio devices:", err);
+                }
+            }
+        };
+
+        if (callState === 'connected') {
+            checkSupport();
+        }
+    }, [callState]);
 
     // Set remote stream when it changes
     useEffect(() => {
@@ -22,9 +54,14 @@ const CallModal = ({
         if (remoteAudioRef.current && remoteStream) {
             console.log('Setting remote audio srcObject');
             remoteAudioRef.current.srcObject = remoteStream;
-            console.log('Remote stream tracks:', remoteStream.getTracks());
+
+            // Apply selected device if any
+            if (selectedDeviceId && supportsSetSinkId) {
+                remoteAudioRef.current.setSinkId(selectedDeviceId)
+                    .catch(e => console.error("Error setting sink ID:", e));
+            }
         }
-    }, [remoteStream]);
+    }, [remoteStream, selectedDeviceId, supportsSetSinkId]);
 
     // Call duration timer
     useEffect(() => {
@@ -38,6 +75,18 @@ const CallModal = ({
         }
         return () => clearInterval(interval);
     }, [callState]);
+
+    const handleDeviceSelect = async (deviceId) => {
+        setSelectedDeviceId(deviceId);
+        setShowDeviceList(false);
+        if (remoteAudioRef.current && supportsSetSinkId) {
+            try {
+                await remoteAudioRef.current.setSinkId(deviceId);
+            } catch (err) {
+                console.error("Error switching audio device:", err);
+            }
+        }
+    };
 
     // Format duration as MM:SS
     const formatDuration = (seconds) => {
@@ -112,7 +161,7 @@ const CallModal = ({
 
                 {/* Active/Calling UI */}
                 {(callState === 'calling' || callState === 'connected') && (
-                    <div className="flex flex-col items-center gap-8 w-full max-w-md px-8">
+                    <div className="flex flex-col items-center gap-8 w-full max-w-md px-8 relative">
                         {/* Animated Avatar */}
                         <motion.div
                             animate={callState === 'connected' ? {
@@ -169,12 +218,60 @@ const CallModal = ({
                         )}
 
                         {/* Controls */}
-                        <div className="flex items-center justify-center gap-8 mt-8">
+                        <div className="flex items-center justify-center gap-6 mt-8 w-full">
+                            {/* Audio Output Selector (Only if supported) */}
+                            {supportsSetSinkId && callState === 'connected' && (
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setShowDeviceList(!showDeviceList)}
+                                        className={`p-5 rounded-full transition-all ${showDeviceList
+                                                ? 'bg-[#00a884] text-white shadow-lg'
+                                                : 'bg-[#37404a] text-[#e9edef] hover:bg-[#404d57]'
+                                            }`}
+                                    >
+                                        <Volume2 className="w-7 h-7" />
+                                    </button>
+
+                                    {/* Device List Dropdown */}
+                                    <AnimatePresence>
+                                        {showDeviceList && (
+                                            <motion.div
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                exit={{ opacity: 0, y: 10 }}
+                                                className="absolute bottom-full mb-4 left-1/2 transform -translate-x-1/2 w-64 bg-[#202c33] rounded-xl shadow-2xl border border-[#37404a] overflow-hidden z-50"
+                                            >
+                                                <div className="p-3 border-b border-[#37404a]">
+                                                    <span className="text-[#8696a0] text-xs uppercase tracking-wider font-medium">Select Audio Output</span>
+                                                </div>
+                                                <div className="max-h-48 overflow-y-auto">
+                                                    {audioDevices.map(device => (
+                                                        <button
+                                                            key={device.deviceId}
+                                                            onClick={() => handleDeviceSelect(device.deviceId)}
+                                                            className={`w-full text-left p-3 text-sm flex items-center gap-3 hover:bg-[#111b21] transition-colors ${selectedDeviceId === device.deviceId ? 'text-[#00a884]' : 'text-[#e9edef]'
+                                                                }`}
+                                                        >
+                                                            {device.label.toLowerCase().includes('bluetooth') ? (
+                                                                <Bluetooth className="w-4 h-4" />
+                                                            ) : (
+                                                                <Volume2 className="w-4 h-4" />
+                                                            )}
+                                                            <span className="truncate">{device.label || `Device ${device.deviceId.slice(0, 5)}...`}</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            )}
+
                             <button
                                 onClick={toggleMute}
                                 className={`p-5 rounded-full transition-all ${isMuted
-                                        ? 'bg-[#e9edef] text-[#0b141a] shadow-lg'
-                                        : 'bg-[#37404a] text-[#e9edef] hover:bg-[#404d57]'
+                                    ? 'bg-[#e9edef] text-[#0b141a] shadow-lg'
+                                    : 'bg-[#37404a] text-[#e9edef] hover:bg-[#404d57]'
                                     }`}
                             >
                                 {isMuted ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
