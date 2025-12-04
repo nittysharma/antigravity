@@ -362,7 +362,7 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
                 </div>
 
                 {/* Messages */}
-                <div className="relative z-10 h-full">
+                <div className="relative z-10 h-full flex flex-col">
                     <MessageList
                         messages={messages}
                         currentUser={socket.id}

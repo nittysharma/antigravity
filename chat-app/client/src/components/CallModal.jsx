@@ -56,16 +56,20 @@ const CallModal = ({
         }
     }, [callState]);
 
-    // Set remote stream when it changes
+    // Set remote stream when it changes or device selection updates
     useEffect(() => {
-        console.log('Remote stream changed:', remoteStream);
         if (remoteAudioRef.current && remoteStream) {
-            console.log('Setting remote audio srcObject');
-            remoteAudioRef.current.srcObject = remoteStream;
+            // Only update srcObject if it has actually changed to avoid resetting audio pipeline
+            if (remoteAudioRef.current.srcObject !== remoteStream) {
+                console.log('Setting remote audio srcObject');
+                remoteAudioRef.current.srcObject = remoteStream;
+            }
 
             // Apply selected device if any
             if (selectedDeviceId && supportsSetSinkId) {
+                console.log('Applying audio device:', selectedDeviceId);
                 remoteAudioRef.current.setSinkId(selectedDeviceId)
+                    .then(() => console.log('Successfully set audio device to:', selectedDeviceId))
                     .catch(e => console.error("Error setting sink ID:", e));
             }
         }
@@ -84,16 +88,10 @@ const CallModal = ({
         return () => clearInterval(interval);
     }, [callState]);
 
-    const handleDeviceSelect = async (deviceId) => {
+    const handleDeviceSelect = (deviceId) => {
         setSelectedDeviceId(deviceId);
         setShowDeviceList(false);
-        if (remoteAudioRef.current && supportsSetSinkId) {
-            try {
-                await remoteAudioRef.current.setSinkId(deviceId);
-            } catch (err) {
-                console.error("Error switching audio device:", err);
-            }
-        }
+        // The useEffect will handle the actual device switching
     };
 
     // Format duration as MM:SS
