@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Phone, Mic, MicOff, PhoneOff, Volume2, Bluetooth } from 'lucide-react';
+import { Phone, Mic, MicOff, PhoneOff, Volume2, Bluetooth, Video, VideoOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const CallModal = ({
@@ -11,9 +11,13 @@ const CallModal = ({
     onReject,
     onEnd,
     isMuted,
-    toggleMute
+    toggleMute,
+    isVideoEnabled,
+    toggleVideo
 }) => {
     const remoteAudioRef = useRef(null);
+    const remoteVideoRef = useRef(null);
+    const localVideoRef = useRef(null);
     const [callDuration, setCallDuration] = useState(0);
     const [audioDevices, setAudioDevices] = useState([]);
     const [selectedDeviceId, setSelectedDeviceId] = useState('');
@@ -73,7 +77,21 @@ const CallModal = ({
                     .catch(e => console.error("Error setting sink ID:", e));
             }
         }
+
+        // Handle Remote Video
+        if (remoteVideoRef.current && remoteStream) {
+            if (remoteVideoRef.current.srcObject !== remoteStream) {
+                remoteVideoRef.current.srcObject = remoteStream;
+            }
+        }
     }, [remoteStream, selectedDeviceId, supportsSetSinkId]);
+
+    // Handle Local Video
+    useEffect(() => {
+        if (localVideoRef.current && localStream) {
+            localVideoRef.current.srcObject = localStream;
+        }
+    }, [localStream, isVideoEnabled]);
 
     // Call duration timer
     useEffect(() => {
@@ -111,8 +129,38 @@ const CallModal = ({
                 exit={{ opacity: 0 }}
                 className="fixed inset-0 z-50 bg-gradient-to-br from-[#0b141a] via-[#1a2730] to-[#0b141a] flex flex-col items-center justify-center"
             >
-                {/* Hidden audio element for remote stream */}
+                {/* Hidden audio element for remote stream (always needed for audio) */}
                 <audio ref={remoteAudioRef} autoPlay playsInline />
+
+                {/* Video Container (Full Screen if Video Enabled) */}
+                {(isVideoEnabled || (remoteStream && remoteStream.getVideoTracks().length > 0)) && callState === 'connected' && (
+                    <div className="absolute inset-0 z-0 bg-black">
+                        {/* Remote Video (Full Screen) */}
+                        <video
+                            ref={remoteVideoRef}
+                            autoPlay
+                            playsInline
+                            className="w-full h-full object-cover"
+                        />
+
+                        {/* Local Video (PIP) */}
+                        {isVideoEnabled && (
+                            <motion.div
+                                drag
+                                dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+                                className="absolute bottom-32 right-6 w-32 h-48 bg-[#202c33] rounded-xl overflow-hidden shadow-2xl border border-[#37404a] z-10"
+                            >
+                                <video
+                                    ref={localVideoRef}
+                                    autoPlay
+                                    playsInline
+                                    muted
+                                    className="w-full h-full object-cover transform scale-x-[-1]"
+                                />
+                            </motion.div>
+                        )}
+                    </div>
+                )}
 
                 {/* Incoming Call UI */}
                 {callState === 'incoming' && (
@@ -165,26 +213,28 @@ const CallModal = ({
                     </div>
                 )}
 
-                {/* Active/Calling UI */}
+                {/* Active/Calling UI - Overlay on top of video if video is active */}
                 {(callState === 'calling' || callState === 'connected') && (
-                    <div className="flex flex-col items-center gap-8 w-full max-w-md px-8 relative">
-                        {/* Animated Avatar */}
-                        <motion.div
-                            animate={callState === 'connected' ? {
-                                scale: [1, 1.02, 1],
-                                boxShadow: [
-                                    '0 0 0 0 rgba(0, 168, 132, 0.4)',
-                                    '0 0 0 20px rgba(0, 168, 132, 0)',
-                                    '0 0 0 0 rgba(0, 168, 132, 0)'
-                                ]
-                            } : {}}
-                            transition={{ duration: 2, repeat: Infinity }}
-                            className="w-48 h-48 rounded-full bg-gradient-to-br from-[#00a884] to-[#008f6f] flex items-center justify-center shadow-2xl"
-                        >
-                            <div className="w-44 h-44 rounded-full bg-[#202c33] flex items-center justify-center">
-                                <Phone className="w-24 h-24 text-[#00a884]" />
-                            </div>
-                        </motion.div>
+                    <div className={`flex flex-col items-center gap-8 w-full max-w-md px-8 relative z-10 ${isVideoEnabled ? 'mt-auto mb-10' : ''}`}>
+                        {/* Animated Avatar - Only show if NO video is active */}
+                        {(!isVideoEnabled && (!remoteStream || remoteStream.getVideoTracks().length === 0)) && (
+                            <motion.div
+                                animate={callState === 'connected' ? {
+                                    scale: [1, 1.02, 1],
+                                    boxShadow: [
+                                        '0 0 0 0 rgba(0, 168, 132, 0.4)',
+                                        '0 0 0 20px rgba(0, 168, 132, 0)',
+                                        '0 0 0 0 rgba(0, 168, 132, 0)'
+                                    ]
+                                } : {}}
+                                transition={{ duration: 2, repeat: Infinity }}
+                                className="w-48 h-48 rounded-full bg-gradient-to-br from-[#00a884] to-[#008f6f] flex items-center justify-center shadow-2xl"
+                            >
+                                <div className="w-44 h-44 rounded-full bg-[#202c33] flex items-center justify-center">
+                                    <Phone className="w-24 h-24 text-[#00a884]" />
+                                </div>
+                            </motion.div>
+                        )}
 
                         {/* Caller Info */}
                         <div className="text-center">
@@ -281,6 +331,16 @@ const CallModal = ({
                                     }`}
                             >
                                 {isMuted ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
+                            </button>
+
+                            <button
+                                onClick={toggleVideo}
+                                className={`p-5 rounded-full transition-all ${!isVideoEnabled
+                                    ? 'bg-[#37404a] text-[#e9edef] hover:bg-[#404d57]'
+                                    : 'bg-[#e9edef] text-[#0b141a] shadow-lg'
+                                    }`}
+                            >
+                                {isVideoEnabled ? <Video className="w-7 h-7" /> : <VideoOff className="w-7 h-7" />}
                             </button>
 
                             <motion.button

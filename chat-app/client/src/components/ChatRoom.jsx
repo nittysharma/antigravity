@@ -17,6 +17,7 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
     const [localStream, setLocalStream] = useState(null);
     const [remoteStream, setRemoteStream] = useState(null);
     const [isMuted, setIsMuted] = useState(false);
+    const [isVideoEnabled, setIsVideoEnabled] = useState(false);
 
     const connectionRef = useRef();
     const localStreamRef = useRef();
@@ -57,10 +58,10 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
         });
 
         // WebRTC Listeners
-        socket.on('call_user', ({ from, name, signal }) => {
+        socket.on('call_user', ({ from, name, signal, isVideo }) => {
             setCallState('incoming');
             setCaller(name);
-            setCallerSignal({ from, signal });
+            setCallerSignal({ from, signal, isVideo });
         });
 
         socket.on('call_accepted', (signal) => {
@@ -145,14 +146,15 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
     };
 
     // WebRTC Functions
-    const startCall = async () => {
+    const startCall = async (video = false) => {
         const targetUser = users.find(u => u.username !== username);
         if (!targetUser) return alert("No one else in the room!");
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: video, audio: true });
             setLocalStream(stream);
             localStreamRef.current = stream;
+            setIsVideoEnabled(video);
             setCallState('calling');
 
             const peer = new RTCPeerConnection({
@@ -165,6 +167,23 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
             connectionRef.current = peer;
 
             stream.getTracks().forEach(track => peer.addTrack(track, stream));
+
+            // Handle negotiation needed for adding tracks later (e.g., toggling video)
+            peer.onnegotiationneeded = async () => {
+                try {
+                    const offer = await peer.createOffer();
+                    await peer.setLocalDescription(offer);
+                    socket.emit('call_user', {
+                        userToCall: targetUser.id,
+                        signalData: offer,
+                        from: socket.id,
+                        name: username,
+                        isVideo: video
+                    });
+                } catch (err) {
+                    console.error("Error during negotiation:", err);
+                }
+            };
 
             peer.onicecandidate = (event) => {
                 if (event.candidate) {
@@ -186,6 +205,7 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
                 console.log('ICE connection state:', peer.iceConnectionState);
             };
 
+            // Initial offer creation (might be redundant if onnegotiationneeded fires, but safe to keep for initial setup)
             const offer = await peer.createOffer();
             await peer.setLocalDescription(offer);
 
@@ -193,7 +213,8 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
                 userToCall: targetUser.id,
                 signalData: offer,
                 from: socket.id,
-                name: username
+                name: username,
+                isVideo: video
             });
 
         } catch (err) {
@@ -204,9 +225,11 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
     const answerCall = async () => {
         try {
             setCallState('connected');
-            const stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+            const isVideoCall = callerSignal.isVideo;
+            const stream = await navigator.mediaDevices.getUserMedia({ video: isVideoCall, audio: true });
             setLocalStream(stream);
             localStreamRef.current = stream;
+            setIsVideoEnabled(isVideoCall);
 
             const peer = new RTCPeerConnection({
                 iceServers: [
@@ -218,6 +241,23 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
             connectionRef.current = peer;
 
             stream.getTracks().forEach(track => peer.addTrack(track, stream));
+
+            // Handle negotiation needed
+            peer.onnegotiationneeded = async () => {
+                try {
+                    const offer = await peer.createOffer();
+                    await peer.setLocalDescription(offer);
+                    socket.emit('call_user', {
+                        userToCall: callerSignal.from,
+                        signalData: offer,
+                        from: socket.id,
+                        name: username,
+                        isVideo: isVideoCall
+                    });
+                } catch (err) {
+                    console.error("Error during negotiation:", err);
+                }
+            };
 
             peer.onicecandidate = (event) => {
                 if (event.candidate) {
@@ -282,24 +322,60 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
         const newMutedState = !isMuted;
         setIsMuted(newMutedState);
 
-        console.log(`Toggling mute to: ${newMutedState}`);
-
-        // 1. Mute local stream tracks (Source)
         if (localStreamRef.current) {
-            localStreamRef.current.getAudioTracks().forEach(track => {
-                track.enabled = !newMutedState;
-                console.log(`Local track ${track.id} enabled: ${track.enabled}`);
-            });
+            localStreamRef.current.getAudioTracks().forEach(track => track.enabled = !newMutedState);
         }
+    };
 
-        // 2. Mute PeerConnection senders (Network)
-        if (connectionRef.current) {
-            connectionRef.current.getSenders().forEach(sender => {
-                if (sender.track && sender.track.kind === 'audio') {
-                    sender.track.enabled = !newMutedState;
-                    console.log(`Sender track ${sender.track.id} enabled: ${sender.track.enabled}`);
+    const toggleVideo = async () => {
+        const newVideoState = !isVideoEnabled;
+
+        if (newVideoState) {
+            // Turning video ON
+            try {
+                const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                const videoTrack = videoStream.getVideoTracks()[0];
+
+                // Add track to local stream
+                if (localStreamRef.current) {
+                    localStreamRef.current.addTrack(videoTrack);
+                    setLocalStream(new MediaStream(localStreamRef.current.getTracks())); // Trigger re-render
                 }
-            });
+
+                // Add track to PeerConnection
+                if (connectionRef.current) {
+                    const senders = connectionRef.current.getSenders();
+                    const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+
+                    if (videoSender) {
+                        videoSender.replaceTrack(videoTrack);
+                    } else {
+                        connectionRef.current.addTrack(videoTrack, localStreamRef.current);
+                    }
+                }
+                setIsVideoEnabled(true);
+            } catch (err) {
+                console.error("Error enabling video:", err);
+            }
+        } else {
+            // Turning video OFF
+            if (localStreamRef.current) {
+                const videoTracks = localStreamRef.current.getVideoTracks();
+                videoTracks.forEach(track => {
+                    track.stop();
+                    localStreamRef.current.removeTrack(track);
+                });
+                setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+            }
+
+            if (connectionRef.current) {
+                const senders = connectionRef.current.getSenders();
+                const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+                if (videoSender) {
+                    videoSender.replaceTrack(null); // Stop sending video
+                }
+            }
+            setIsVideoEnabled(false);
         }
     };
 
@@ -329,8 +405,12 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
                 </div>
 
                 <div className="flex items-center gap-6 text-[#aebac1]">
+                    <Video
+                        onClick={() => startCall(true)}
+                        className="w-5 h-5 cursor-pointer hover:text-white transition-colors"
+                    />
                     <Phone
-                        onClick={() => startCall()}
+                        onClick={() => startCall(false)}
                         className="w-5 h-5 cursor-pointer hover:text-white transition-colors"
                     />
                     <div className="w-[1px] h-6 bg-[#37404a] mx-1"></div>
@@ -352,6 +432,8 @@ const ChatRoom = ({ socket, username, roomId, onLock }) => {
                 onEnd={endCall}
                 isMuted={isMuted}
                 toggleMute={toggleMute}
+                isVideoEnabled={isVideoEnabled}
+                toggleVideo={toggleVideo}
             />
 
             {/* Messages - Flexible area with background */}
